@@ -1,7 +1,7 @@
 -- COVID 19 DATA EXPLORATION 
 -- LINK TO THE DATASET: https://ourworldindata.org/covid-deaths 
 
-USE portfolioproject
+USE mydatabase;
 
 -- RENAMETABLES------
 RENAME TABLE coviddeaths TO covid_deaths;
@@ -11,12 +11,12 @@ RENAME TABLE covidvaccinations TO covid_vaccinations;
 SELECT 
     *
 FROM
-    portfolioproject.covid_deaths
+    covid_deaths
 ORDER BY location , date;
 SELECT 
     *
 FROM
-    portfolioproject.covid_vaccinations    
+    covid_vaccinations    
 ORDER BY location, date;
     
 -- CONVERT DATE COLUMN FROM STRING TO DATETIME IN covid_deaths TABLE------
@@ -82,6 +82,7 @@ SELECT
     MAX((total_cases / population)) * 100 AS infection_rate
 FROM
     covid_deaths
+WHERE continent != ''
 GROUP BY location, population
 ORDER BY infection_rate DESC; 
 
@@ -119,9 +120,9 @@ ORDER BY date DESC ;
 
 -- GLOBAL DEATH RATE
 SELECT 
-    SUM(total_deaths) AS global_deaths,
+    SUM(new_cases) AS global_deaths,
     SUM(total_cases) AS global_cases,
-    ROUND(((SUM(total_deaths) / SUM(total_cases)) * 100), 2) AS global_death_rate
+    ROUND(((SUM(new_deaths) / SUM(new_cases)) * 100), 2) AS global_death_rate
 FROM
     covid_deaths
 WHERE
@@ -183,9 +184,10 @@ FROM
     covid_deaths d ON d.location = v.location AND d.date = v.date
 WHERE d.continent != ''
 )
-SELECT *, ROUND((total_vaccinations/population)*100) AS vaccination_percentage FROM vac_over_pouplation;
+SELECT *, (total_vaccinations/population)*100 AS vaccination_percentage FROM vac_over_pouplation;
 
 -- ALTERNATIVE WITH TEMP TABLE
+DROP TABLE IF EXISTS temp_vac_over_pouplation;
 CREATE TEMPORARY TABLE temp_vac_over_pouplation
 SELECT 
     d.continent,
@@ -198,7 +200,67 @@ FROM
     covid_vaccinations v
         JOIN
     covid_deaths d ON d.location = v.location AND d.date = v.date
-WHERE d.continent != ''
-LIMIT 0;
+WHERE d.continent != '';
+SELECT *, (total_vaccinations/population)*100 AS vaccination_percentage FROM temp_vac_over_pouplation;
 
+-- VISUALIZATIONS-------------------------------------------------
+CREATE VIEW vaccination_percentage AS 
+SELECT 
+    d.continent,
+    d.location,
+    d.date,
+    d.population,
+    v.new_vaccinations,
+    SUM(v.new_vaccinations) OVER(PARTITION BY d.location ORDER BY d.date) AS total_vaccinations
+FROM
+    covid_vaccinations v
+        JOIN
+    covid_deaths d ON d.location = v.location AND d.date = v.date
+WHERE d.continent != '';
 
+SELECT * FROM vaccination_percentage;
+
+-- 1. GLOBAL DEATH PERCENTAGE:
+SELECT 
+    SUM(new_cases) AS global_deaths,
+    SUM(total_cases) AS global_cases,
+    ROUND(((SUM(new_deaths) / SUM(new_cases)) * 100), 2) AS global_death_rate
+FROM
+    covid_deaths
+WHERE
+    continent != '';
+    
+-- 2. CONTINENTS' TOTAL DEATHS:
+SELECT 
+    location,
+    MAX(total_deaths) AS total_deaths
+FROM
+    covid_deaths
+WHERE
+    continent = '' AND location NOT IN ('World', 'European Union', 'International')
+GROUP BY location
+ORDER BY total_deaths DESC;  
+
+-- 3. HIGEST INFECTION RATE BY COUNTRIES
+SELECT 
+    location,
+    population,
+    MAX(total_cases) AS total_cases,
+    MAX((total_cases / population)) * 100 AS infection_rate
+FROM
+    covid_deaths
+WHERE continent != ''
+GROUP BY location, population
+ORDER BY infection_rate DESC; 
+
+-- 4. HIGHEST INFECTION RATES BY COUNTRIES (GROUP BY DATE)
+SELECT 
+    location,
+    population,
+    date,
+    MAX(total_cases) AS total_cases,
+    MAX((total_cases / population)) * 100 AS infection_rate
+FROM
+    covid_deaths
+WHERE continent != ''
+GROUP BY location, population, date; 
